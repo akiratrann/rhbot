@@ -1,0 +1,12 @@
+[Unit]
+Description=rhbot weekly walk-forward re-selection
+
+[Service]
+Type=oneshot
+User=rhbot
+WorkingDirectory=/opt/rhbot
+# Applies survivors to the PAPER config only. Re-pointing real money at new
+# symbols without a human looking first is not something to automate.
+ExecStart=/opt/rhbot/.venv/bin/python relearn.py --apply config.yaml --top 4 --notional 20000
+StandardOutput=append:/opt/rhbot/logs/relearn.log
+StandardError=append:/opt/rhbot/logs/relearn.log

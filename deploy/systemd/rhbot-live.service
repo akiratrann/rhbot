@@ -1,0 +1,26 @@
+[Unit]
+Description=rhbot LIVE trading — REAL MONEY
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rhbot
+WorkingDirectory=/opt/rhbot
+ExecStart=/opt/rhbot/.venv/bin/python run.py --config config.live.yaml
+# Always come back: a crash, an OOM kill, or a reboot must not leave positions
+# open with nothing watching them. That is the entire reason for the VPS.
+Restart=always
+RestartSec=30
+StandardOutput=append:/opt/rhbot/logs/live.log
+StandardError=append:/opt/rhbot/logs/live.log
+
+# The bot needs only its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rhbot/state /opt/rhbot/logs
+
+[Install]
+WantedBy=multi-user.target

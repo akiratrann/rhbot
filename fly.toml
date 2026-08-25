@@ -1,0 +1,23 @@
+app = "rhbot-live"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  TZ = "America/New_York"
+
+# The book must survive restarts and redeploys.
+[mounts]
+  source = "rhbot_state"
+  destination = "/app/state"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# No [[services]] block on purpose: nothing is exposed to the internet. The
+# dashboard is unauthenticated, so reach it with `fly proxy 5003:5003` instead.
+
+[deploy]
+  strategy = "immediate"

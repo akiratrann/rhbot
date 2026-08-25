@@ -1,0 +1,38 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "payback",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/akiratran/payback", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "furigana-desk",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/akiratran/furigana-desk",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3111"
+      ],
+      "port": 3111
+    },
+    {
+      "name": "akiratran-site",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "/Users/akiratran/akiratran-site",
+        "dev",
+        "--port",
+        "3210"
+      ],
+      "port": 3210
+    }
+  ]
+}

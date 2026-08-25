@@ -1,0 +1,81 @@
+# ============================================================
+#  rhbot — CHARLES SCHWAB, REAL MONEY
+#
+#      python run.py --config config.schwab.yaml
+#
+#  This file is deliberately SEPARATE from config.yaml so the all-in paper
+#  sizing can never leak into a live account. config.yaml deploys $100k of
+#  fake money across five slots; this one starts small on purpose.
+#
+#  Before using it:
+#    1. Run a full week on config.yaml (Alpaca paper) and read the results.
+#    2. python schwab_login.py        <- and again every 7 days, forever
+#    3. Raise the numbers below only after the paper run earns it.
+# ============================================================
+
+mode: live
+broker: schwab
+
+# No crypto: the Schwab Trader API does not offer it, and startup refuses a
+# crypto symbol rather than failing at order time.
+# No fractional shares either — order_notional is floored to whole shares, so
+# anything below one share price simply does not trade.
+
+poll_interval_seconds: 60
+bar_interval: 1d
+max_bar_age_minutes:
+
+# ------------------------------------------------------------
+#  START SMALL. These are ~2% of what the paper config deploys.
+#  The point of the first live month is to confirm that orders fill the way
+#  the backtest assumed — not to make money.
+# ------------------------------------------------------------
+watchlist:
+  # Beat buy & hold in the 3-year backtest (+71.7% vs +57.4%).
+  - symbol: MSFT
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.002
+    order_notional: 500.0
+
+  # Widest margin over buy & hold in the backtest (+119.4% vs -3.1%).
+  - symbol: DUOL
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.002
+    order_notional: 500.0
+
+risk:
+  max_order_notional: 1000.0
+  max_total_exposure: 2000.0
+  max_open_positions: 2
+  # ~5% of the committed capital. Tighten, don't loosen.
+  max_daily_loss: -100.0
+  kill_switch_file: state/STOP
+  # Daily bars produce at most one meaningful signal per day; 4 hours prevents
+  # double-firing inside a session.
+  min_seconds_between_trades: 14400
+
+  # KEEP THIS ON for real money. Under $25k equity you get 3 day trades per 5
+  # business days; the guard blocks new entries once the budget is spent and
+  # auto-disables itself if Schwab reports equity above $25k.
+  pdt_guard: true
+  max_day_trades_per_5_days: 3
+
+dashboard:
+  enabled: true
+  host: 127.0.0.1
+  # Different port so it can run alongside the paper bot without clashing.
+  port: 5002
+
+# Its own book — sharing one with a paper run would load the wrong cash and
+# positions and size real orders against them.
+state_file: state/portfolio-schwab.json
+
+logging:
+  level: INFO
+  file: logs/rhbot-schwab.log

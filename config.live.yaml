@@ -1,0 +1,163 @@
+# ============================================================
+#  rhbot — ALPACA LIVE, REAL MONEY, $300 ACCOUNT
+#
+#      python preflight.py --config config.live.yaml    <- ALWAYS run first
+#      python run.py --config config.live.yaml
+#
+#  Separate from config.yaml on purpose: that one is all-in on a $100k paper
+#  account and those numbers must never reach a real one.
+#
+#  REQUIRES ALPACA_LIVE_API_KEY / ALPACA_LIVE_API_SECRET in .env. Paper keys
+#  return 401 against the live host — they are a different credential pair.
+#  Generate them at app.alpaca.markets with the account switcher set to LIVE.
+# ============================================================
+
+mode: live
+broker: alpaca
+alpaca_data_feed: iex
+
+# 300s: with daily bars nothing changes minute to minute, and slower polling
+# means far fewer connection timeouts on a slow link.
+poll_interval_seconds: 300
+
+# ------------------------------------------------------------
+#  WHY DAILY BARS AND NOT INTRADAY
+#
+#  At $300 equity the Pattern Day Trader rule binds hard: 3 day trades per 5
+#  business days, full stop. "Trade a lot each day" on STOCKS is not available
+#  at this account size — not a config choice, a regulation.
+#
+#  Daily bars with overnight holds are not day trades, so they never touch that
+#  budget. CRYPTO is exempt from PDT entirely and is the only slot here that
+#  can trade as often as the signal fires.
+#
+#  Measured, not assumed: intraday sweeps on 5m bars found no config that beat
+#  buy & hold while staying under 3 day trades/week (sweep_intraday.py).
+# ------------------------------------------------------------
+bar_interval: 1d
+max_bar_age_minutes:
+
+# ------------------------------------------------------------
+#  $100 per slot, 3 slots = $300 fully deployed.
+#  Symbols and params come from `python relearn.py` — walk-forward validated,
+#  meaning params were chosen on a training window and scored on unseen data.
+#  Re-run relearn.py weekly; it rewrites this list.
+# ------------------------------------------------------------
+# MIRRORS THE PAPER RUN: same five symbols, same params, scaled from $20,000
+# per slot to $60. Alpaca supports fractional shares, so $60 of a $550 stock is
+# a real position rather than a rounding error.
+#
+# Params are walk-forward validated — chosen on a training window, then scored
+# on data the search never saw. Re-run `python relearn.py` weekly to refresh.
+# FOUR slots at $75 = the full $300 deployed. Sized from BUYING POWER, not
+# equity: with $60 already in SMCI there is $240 of cash, and 3 new entries at
+# $75 need $225 of it. Five slots would have forced $48 each; three would mean
+# more concentration per name. Four is the most capital at work without an
+# order that cannot fill.
+#
+# T was dropped — lowest walk-forward edge of the five (+4.28% vs hold), so it
+# was the cheapest slot to reclaim for size.
+# SIX slots at $50 = the full $300, chosen for breadth over position size.
+# Six sectors instead of four, at the cost of $50 orders rather than $75.
+#
+# BTC IS GONE, and this is the most important change in the file. A real paper
+# fill showed a $20,000 crypto order deploying $19,609.95 — 195 bps of
+# spread+fee on ONE side, ~3.9% per round trip. Equity fills on the same day
+# lost 0-2 bps. Re-running the crypto sweep with the MEASURED cost instead of
+# the assumed 10 bps turned its best config from +22.71% (a tie with holding)
+# into +12.85% against +22.43% — a clear loss. Crypto here is a fee generator.
+#
+# The cost of dropping it: nothing else in this list is PDT-exempt, so all six
+# slots are capped at 3 day trades per 5 business days. Daily bars with
+# overnight holds do not consume that budget, which is why bar_interval is 1d.
+watchlist:
+  # semis | walk-forward edge +91.49% vs hold, 16 round trips, 27% max DD
+  - symbol: SMCI
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.01
+    order_notional: 50.0
+
+  # e-commerce | edge +40.51%, 8 round trips, 22.8% max DD
+  - symbol: SHOP
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 8
+      min_slope_pct: 0.002
+    order_notional: 50.0
+
+  # tech/social | edge +19.37%, 18 round trips — the largest sample here
+  - symbol: META
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.002
+    order_notional: 50.0
+
+  # software | edge +17.72%, 6 round trips
+  - symbol: MSFT
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.005
+    order_notional: 50.0
+
+  # industrials/aero | edge +15.99%, 8 round trips, 16% max DD
+  - symbol: BA
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.005
+    order_notional: 50.0
+
+  # retail | edge +14.69%, 15 round trips, 8.2% max DD — the calm anchor
+  - symbol: HD
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 8
+      min_slope_pct: 0.0
+    order_notional: 50.0
+
+# ------------------------------------------------------------
+#  Risk limits — the last gate before any order. Tighten, don't loosen.
+# ------------------------------------------------------------
+risk:
+  # Headroom above the $100 entry size. Exits skip this gate entirely (see
+  # risk.py) so a winner can never grow too large to sell.
+  max_order_notional: 75.0
+  max_total_exposure: 300.0
+  max_open_positions: 6
+  # 15% of the account, loosened from 10%. SMCI and SHOP carry 27% and 23% max
+  # drawdowns; at -$30 an ordinary bad session on two of them would halt the
+  # bot outright. This should catch something breaking, not normal volatility.
+  # It is still a hard floor: at -$45 everything stops for the day.
+  max_daily_loss: -45.0
+  # Panic button, works instantly even while you are travelling:
+  #   touch state/STOP
+  kill_switch_file: state/STOP
+  min_seconds_between_trades: 14400
+
+  # KEEP ON. At $300 you are far under the $25k threshold, so the 3-per-5-days
+  # cap is real. The guard blocks new stock ENTRIES once the budget is spent;
+  # exits are never blocked. Crypto is exempt and unaffected.
+  pdt_guard: true
+  max_day_trades_per_5_days: 3
+
+dashboard:
+  enabled: true
+  host: 127.0.0.1
+  # Different port so it runs alongside the paper bot on 5001.
+  port: 5003
+
+state_file: state/portfolio-live.json
+
+logging:
+  level: INFO
+  file: logs/rhbot-live.log

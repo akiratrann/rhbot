@@ -1,0 +1,80 @@
+# ============================================================
+#  rhbot — LIVE CRYPTO, INTRADAY. REAL MONEY.
+#
+#      .venv/bin/python preflight.py --config config.live.crypto.yaml
+#      .venv/bin/python run.py --config config.live.crypto.yaml
+#
+#  Runs ALONGSIDE config.live.yaml (own port, own book). This is the only
+#  config that can act on intraday highs and lows: crypto is exempt from the
+#  Pattern Day Trader cap, so it can round-trip as often as the signal fires.
+#  Equities at $300 cannot — 3 day trades per 5 business days, full stop.
+#
+#  READ THIS FIRST
+#  ---------------
+#  Measured on 15-minute bars with 10bps/side slippage:
+#      BTC  best config +22.71%  vs  buy & hold +22.52%   (6 trades)
+#      ETH  best config +25.53%  vs  buy & hold +31.66%   (4 trades)
+#  A tie and a loss, over 7-11 days — all the intraday history Alpaca serves.
+#  That is NOT evidence of an edge; it is a sample too small to conclude from.
+#  Sized at $60/slot for exactly that reason.
+# ============================================================
+
+mode: live
+broker: alpaca
+
+# 15-minute bars: the interval the params below were tuned on. Changing this
+# silently changes what `smooth: 2` means (2 bars = 30 minutes here, 2 days on
+# the daily config) without changing a single number.
+bar_interval: 15m
+
+# Crypto trades 24/7, so a 5-minute poll always has fresh bars to act on.
+poll_interval_seconds: 300
+max_bar_age_minutes:
+
+watchlist:
+  # smooth=2, db=0.0020: +19.92% over the test window, 15 trades, 85.7% wins.
+  # NOT the top-ranked config — the top one had 6 trades, and 15 trades is a
+  # sample where 6 is an anecdote.
+  - symbol: BTC-USD
+    asset_class: crypto
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.002
+    order_notional: 60.0
+
+  # smooth=8, db=0.0005: +23.89%, 16 trades, 87.5% wins. Same reasoning —
+  # chosen for trade count over headline return.
+  - symbol: ETH-USD
+    asset_class: crypto
+    strategy: slope_reversal
+    params:
+      smooth: 8
+      min_slope_pct: 0.0005
+    order_notional: 60.0
+
+risk:
+  max_order_notional: 80.0
+  max_total_exposure: 120.0
+  max_open_positions: 2
+  # 10% of what this config can deploy.
+  max_daily_loss: -12.0
+  kill_switch_file: state/STOP
+  # 15 minutes, not 4 hours: at 15m bars a 4-hour cooldown would suppress
+  # 15 of every 16 signals, which defeats the point of running intraday.
+  min_seconds_between_trades: 900
+  # Irrelevant for crypto (exempt), kept on so a stray equity symbol added
+  # later cannot quietly bypass it.
+  pdt_guard: true
+  max_day_trades_per_5_days: 3
+
+dashboard:
+  enabled: true
+  host: 127.0.0.1
+  port: 5004
+
+state_file: state/portfolio-live-crypto.json
+
+logging:
+  level: INFO
+  file: logs/rhbot-live-crypto.log

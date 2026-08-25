@@ -1,0 +1,167 @@
+# ============================================================
+#  rhbot configuration
+#  Edit freely. Secrets go in .env, NOT here.
+# ============================================================
+
+# "paper"  -> no real money
+# "live"   -> places REAL orders with REAL money
+mode: paper
+
+# Which venue routes the orders.
+#   auto      -> Alpaca if ALPACA_* keys are in .env, else Robinhood/paper
+#   alpaca    -> Alpaca's official REST API (stocks + crypto, one key pair)
+#   schwab    -> Charles Schwab Trader API. LIVE MONEY ONLY (no paper account
+#                exists on that API) and stocks only (no crypto). Requires
+#                `mode: live` and a weekly `python schwab_login.py`.
+#   robinhood -> robin_stocks (unofficial) for stocks, official API for crypto
+#   paper     -> force the built-in simulator even when credentials exist
+#
+# RECOMMENDED SPLIT: test on `alpaca` + `mode: paper`, trade real money on
+# `schwab` + `mode: live`. Same strategies and risk limits either way — only
+# these two lines change.
+#
+# WHAT "paper" MEANS DEPENDS ON THIS SETTING:
+#   broker: paper  + mode: paper -> fills simulated locally with fixed slippage
+#   broker: alpaca + mode: paper -> orders go to Alpaca's PAPER account: a real
+#     matching engine holding fake money. Real fill prices, real partial fills,
+#     no PDT cap, no settlement, unlimited round trips. Rehearse here.
+broker: auto
+
+# Alpaca stock data: "iex" (free, real-time, single venue) or "sip" (full
+# consolidated tape, paid). Crypto data is full-book on both. Ignored unless
+# the resolved broker is alpaca.
+alpaca_data_feed: iex
+
+# Starting cash for the paper portfolio (ignored in live mode).
+# MUST match the Alpaca paper account's equity, or the local book and the
+# broker disagree about how much capital exists and risk checks size against
+# the wrong number.
+paper_starting_cash: 100000.0
+
+# How often the engine wakes up, fetches data, and evaluates strategies (seconds).
+# 300s, not 60s: with bar_interval 1d a daily bar changes once a day, so minute
+# polling bought nothing and generated 5x the requests — which on a slow link
+# meant constant 20s connect timeouts (206 errors in the last 24h).
+poll_interval_seconds: 300
+
+# Bar size the strategies see: 1m, 5m, 15m, 1h, 1d.
+# CRITICAL: this MUST match the interval you tuned params on in sweep.py.
+# The params below were tuned on DAILY bars, so this is 1d. Setting this to 1m
+# would silently reinterpret "smooth: 3" as 3 minutes instead of 3 days.
+# Daily bars also mean positions are held overnight, which avoids day trades.
+bar_interval: 1d
+
+# Refuse to trade if the newest bar is older than this many minutes (guards
+# against weekends, holidays, and silently broken feeds).
+# Leave blank to auto-pick a sensible value for the bar_interval above.
+max_bar_age_minutes:
+
+# ------------------------------------------------------------
+#  What to trade. Each entry is one instrument the engine tracks.
+#  asset_class: "stock" or "crypto"
+# ------------------------------------------------------------
+# Symbols and params come from WALK-FORWARD validation (walkforward.py), not
+# from the in-sample screen. Params were chosen on a training window and then
+# scored on data the search never saw. Of 64 candidates, only 10 both made
+# money AND beat buy & hold out of sample — these are five of them.
+#
+# READ THIS BEFORE TRUSTING IT: choosing which symbols survived is itself a
+# selection made after seeing results. With 64 candidates, ~10 survivors is
+# roughly what chance alone produces. The per-symbol PARAMS are honestly
+# out-of-sample; the SYMBOL LIST is not.
+watchlist:
+  # OOS +11.17% vs hold -16.94%, 17 round trips — the largest trade sample
+  # among the survivors, so the least likely to be noise.
+  - symbol: META
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.002
+    order_notional: 20000.0
+
+  # OOS +44.44% vs hold -39.00%, 15 round trips. Biggest edge in the screen,
+  # and also the most volatile name here (27% max drawdown).
+  - symbol: SMCI
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.01
+    order_notional: 20000.0
+
+  # OOS +8.73% vs hold -8.27%, 14 round trips.
+  - symbol: HD
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 8
+      min_slope_pct: 0.0
+    order_notional: 20000.0
+
+  # OOS +4.34% vs hold -5.26%, 11 round trips. Low-volatility telecom, included
+  # to keep the basket from being all high-beta tech.
+  - symbol: T
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 1
+      min_slope_pct: 0.01
+    order_notional: 20000.0
+
+  # Crypto: uncorrelated with equities, exempt from the PDT cap, and the only
+  # slot that can trade outside market hours.
+  - symbol: BTC-USD
+    asset_class: crypto
+    strategy: slope_reversal
+    params:
+      smooth: 5
+      min_slope_pct: 0.002
+    order_notional: 20000.0
+
+# ------------------------------------------------------------
+#  Risk limits — enforced on every order before it is placed.
+#  These are your safety rails. Tighten them, don't loosen them.
+# ------------------------------------------------------------
+risk:
+  # PAPER SIZING — deliberately all-in on the $100k Alpaca paper account.
+  # These are NOT the numbers to use with real money; config.schwab.yaml keeps
+  # a separate, conservative set so the two can never bleed into each other.
+  # Reject any single ENTRY whose notional exceeds this. Headroom above the
+  # $20,000 entry size; exits skip this gate entirely (see risk.py) so an
+  # appreciated winner can never become too large to sell.
+  max_order_notional: 25000.0
+  # Max total dollar exposure across all open positions.
+  max_total_exposure: 100000.0
+  # Max number of distinct open positions at once.
+  max_open_positions: 5
+  # Stop trading for the day (kill switch) if realized+unrealized PnL
+  # drops below this negative number. Scaled to 10% of the account — at the
+  # old -500 on a $100k book the bot would halt on noise.
+  max_daily_loss: -10000.0
+  # If this file exists on disk, the engine halts immediately. Your panic button:
+  #   touch state/STOP
+  kill_switch_file: state/STOP
+  # FREQUENCY GOVERNOR: minimum seconds between trades PER SYMBOL.
+  # With daily bars there is at most one meaningful signal per day, so 4 hours
+  # is plenty and prevents double-firing within a single session.
+  min_seconds_between_trades: 14400
+
+  # PATTERN DAY TRADER guard. Under $25k equity you get 3 day trades per 5
+  # business days. When the budget is spent this blocks NEW STOCK ENTRIES.
+  # Exits are never blocked (being trapped in a loser is worse than a flag).
+  # Crypto is exempt from PDT and is never gated by this.
+  pdt_guard: true
+  max_day_trades_per_5_days: 3
+
+# ------------------------------------------------------------
+#  Local dashboard (read-only monitoring UI).
+# ------------------------------------------------------------
+dashboard:
+  enabled: true
+  host: 127.0.0.1
+  port: 5001
+
+logging:
+  level: INFO
+  file: logs/rhbot.log

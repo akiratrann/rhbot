@@ -1,0 +1,21 @@
+# Secrets — never commit these
+.env
+*.pem
+*.key
+# Schwab OAuth tokens — these can trade your account until they expire.
+state/schwab_token.json
+
+# Runtime state / logs
+# Ignore the whole directory, not just *.json: relearn writes .jsonl, and a
+# future file with a new extension would otherwise land in the repo silently.
+state/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.DS_Store

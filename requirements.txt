@@ -1,0 +1,16 @@
+# Core
+PyYAML>=6.0
+python-dotenv>=1.0
+requests>=2.31
+
+# Stocks (unofficial Robinhood library)
+robin_stocks>=3.0
+
+# Official Robinhood Crypto API request signing (Ed25519)
+cryptography>=42.0
+
+# Local dashboard
+Flask>=3.0
+
+# Tests
+pytest>=8.0
