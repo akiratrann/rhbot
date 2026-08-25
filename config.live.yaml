@@ -16,9 +16,21 @@ mode: live
 broker: alpaca
 alpaca_data_feed: iex
 
-# 300s: with daily bars nothing changes minute to minute, and slower polling
-# means far fewer connection timeouts on a slow link.
-poll_interval_seconds: 300
+# MONITOR every 60s, but that is not the same as TRADING every 60s. Three
+# separate gates decide whether a check becomes an order:
+#
+#   1. bar_interval — crypto reads 15m bars, equities 1d. The signal itself
+#      only changes when a bar does, so minute polling sees an in-progress bar
+#      move, not 1440 fresh opinions a day.
+#   2. min_slope_pct — a flip smaller than the deadband is noise, not a turn.
+#   3. min_seconds_between_trades — 900s per symbol, so even a genuine signal
+#      cannot fire twice inside 15 minutes.
+#
+# Measured, and the reason bar_interval is NOT 1m: on 1-minute bars BTC's best
+# config returned +6.55% against buy & hold's +21.99%. Finer bars lost money
+# monotonically (15m +21.74%, 5m +15.15%, 1m +6.55%). Polling faster is free;
+# DECIDING faster is what cost money.
+poll_interval_seconds: 60
 
 # ------------------------------------------------------------
 #  WHY DAILY BARS AND NOT INTRADAY
