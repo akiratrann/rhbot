@@ -148,7 +148,7 @@ def test_regression_window_must_be_sane():
         SlopeRegression({"window": 2})
 
 
-def test_registered_under_its_config_name():
+def test_slope_regression_is_registered():
     from rhbot.strategy import build_strategy
     from rhbot.strategy.slope_regression import SlopeRegression
     assert isinstance(build_strategy("slope_regression", {}), SlopeRegression)
