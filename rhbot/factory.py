@@ -160,8 +160,14 @@ def _build_alpaca(cfg: Config,
         paper=not cfg.is_live,
         data_feed=cfg.alpaca_data_feed,
     )
-    feed = AlpacaFeed(client, symbol_class, interval=cfg.bar_interval)
+    per_symbol = {w.symbol: w.bar_interval for w in cfg.watchlist
+                  if w.bar_interval}
+    feed = AlpacaFeed(client, symbol_class, interval=cfg.bar_interval,
+                      symbol_interval=per_symbol)
     broker = AlpacaBroker(client, symbol_class)
+    for sym, iv in sorted(per_symbol.items()):
+        log.info("%s trades on %s bars (overriding the %s default)",
+                 sym, iv, cfg.bar_interval)
 
     if cfg.is_live:
         log.warning("Broker: ALPACA LIVE — REAL orders with REAL money")

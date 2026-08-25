@@ -19,6 +19,15 @@ class WatchItem:
     strategy: str
     params: dict = field(default_factory=dict)
     order_notional: float = 100.0
+    #: Per-symbol bar size, overriding the top-level `bar_interval`.
+    #: Exists because crypto is PDT-exempt and can trade intraday while
+    #: equities at a small account size cannot. Without it, running both means
+    #: two engines on one brokerage account — each seeding a book from the same
+    #: cash, each believing it owns all of it.
+    #: NOTE `params` are interpreted in BARS, so a symbol on a different
+    #: interval needs params tuned for THAT interval: smooth=5 is five days at
+    #: 1d and 75 minutes at 15m.
+    bar_interval: Optional[str] = None
 
 
 @dataclass
@@ -142,6 +151,23 @@ class Config:
     def yahoo_range(self) -> str:
         return BAR_INTERVALS[self.bar_interval][0]
 
+    def interval_for(self, symbol: str) -> str:
+        """The bar size this symbol actually trades on."""
+        for w in self.watchlist:
+            if w.symbol == symbol and w.bar_interval:
+                return w.bar_interval
+        return self.bar_interval
+
+    def bar_age_limit_for(self, symbol: str) -> int:
+        """Staleness threshold for THIS symbol's interval, not the global one.
+
+        A 15m symbol judged against the 1d threshold (4 days) would happily
+        trade on bars from last Tuesday.
+        """
+        if self.max_bar_age_minutes is not None:
+            return self.max_bar_age_minutes
+        return BAR_INTERVALS[self.interval_for(symbol)][1]
+
     @property
     def bar_age_limit_minutes(self) -> int:
         """Resolved staleness threshold (explicit override, else per-interval)."""
@@ -165,6 +191,8 @@ def load_config(path: str = "config.yaml") -> Config:
                 strategy=w["strategy"],
                 params=w.get("params", {}) or {},
                 order_notional=float(w.get("order_notional", 100.0)),
+                bar_interval=(str(w["bar_interval"])
+                              if w.get("bar_interval") else None),
             )
         )
 
@@ -283,6 +311,23 @@ def _validate(cfg: Config) -> None:
             f"bar_interval must be one of {sorted(BAR_INTERVALS)}, "
             f"got {cfg.bar_interval!r}"
         )
+    for w in cfg.watchlist:
+        if w.bar_interval and w.bar_interval not in BAR_INTERVALS:
+            raise ValueError(
+                f"{w.symbol}: bar_interval must be one of "
+                f"{sorted(BAR_INTERVALS)}, got {w.bar_interval!r}"
+            )
+        # Intraday equities round-trip as day trades; crypto is exempt. Catch
+        # the combination at load time rather than at the PDT cap.
+        if (w.bar_interval and w.bar_interval != "1d"
+                and w.asset_class != AssetClass.CRYPTO and cfg.risk.pdt_guard):
+            raise ValueError(
+                f"{w.symbol}: intraday bar_interval {w.bar_interval!r} on an "
+                f"EQUITY means intraday round trips, which are day trades. "
+                f"Under $25k that is 3 per 5 business days. Use 1d for "
+                f"equities, or set pdt_guard: false if you know what you are "
+                f"doing."
+            )
     if not cfg.watchlist:
         raise ValueError("watchlist is empty — nothing to trade")
     if cfg.is_live and cfg.state_file == "state/portfolio.json":

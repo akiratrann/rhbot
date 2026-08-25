@@ -633,3 +633,64 @@ def test_seeded_book_passes_the_cash_guard(tmp_path):
     seed_live_book_from_broker(cfg, broker, cfg.state_file)
     p = Portfolio.load_or_new(cfg.paper_starting_cash, cfg.state_file)
     verify_cash_matches_broker(broker, p, cfg)   # must not raise
+
+
+# ---- per-symbol bar intervals ---------------------------------------------
+
+def test_feed_uses_the_per_symbol_interval():
+    """Crypto on 15m and equities on 1d must coexist in ONE engine.
+
+    Two engines on one brokerage account each seed a book from the same cash
+    and both believe they own all of it.
+    """
+    feed = AlpacaFeed(make_client([("GET", "/v2/stocks/bars",
+                                    FakeResponse(BARS))]),
+                      {"AAPL": AssetClass.STOCK, "BTC-USD": AssetClass.CRYPTO},
+                      interval="1d", symbol_interval={"BTC-USD": "15m"})
+    assert feed.timeframe_for("AAPL") == "1Day"
+    assert feed.timeframe_for("BTC-USD") == "15Min"
+
+
+def test_per_symbol_interval_reaches_the_request():
+    payload = {"bars": {"BTC/USD": BARS["bars"]["AAPL"]}}
+    feed = AlpacaFeed(make_client([("GET", "/v1beta3/crypto",
+                                    FakeResponse(payload))]),
+                      {"BTC-USD": AssetClass.CRYPTO},
+                      interval="1d", symbol_interval={"BTC-USD": "15m"})
+    feed.get_bars("BTC-USD", 2)
+    assert feed.client._session.calls[0]["params"]["timeframe"] == "15Min"
+
+
+def test_staleness_threshold_follows_the_symbols_interval():
+    """A 15m symbol judged by the 1d limit would trade on last week's bars."""
+    cfg = Config(watchlist=[
+        WatchItem("AAPL", AssetClass.STOCK, "sma_crossover"),
+        WatchItem("BTC-USD", AssetClass.CRYPTO, "sma_crossover",
+                  bar_interval="15m")], bar_interval="1d")
+    assert cfg.bar_age_limit_for("AAPL") == 5760      # 4 days
+    assert cfg.bar_age_limit_for("BTC-USD") == 120    # 2 hours
+
+
+def test_intraday_equity_is_refused_while_the_pdt_guard_is_on():
+    """Intraday equity round trips ARE day trades: 3 per 5 days under $25k."""
+    cfg = Config(
+        watchlist=[WatchItem("AAPL", AssetClass.STOCK, "sma_crossover",
+                             bar_interval="15m")],
+        risk=RiskConfig(pdt_guard=True))
+    with pytest.raises(ValueError, match="day trades"):
+        _validate(cfg)
+
+
+def test_intraday_crypto_is_allowed():
+    cfg = Config(
+        watchlist=[WatchItem("BTC-USD", AssetClass.CRYPTO, "sma_crossover",
+                             bar_interval="15m")],
+        risk=RiskConfig(pdt_guard=True))
+    _validate(cfg)
+
+
+def test_unknown_per_symbol_interval_is_rejected():
+    cfg = Config(watchlist=[WatchItem("BTC-USD", AssetClass.CRYPTO,
+                                      "sma_crossover", bar_interval="7m")])
+    with pytest.raises(ValueError, match="bar_interval must be one of"):
+        _validate(cfg)

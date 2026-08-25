@@ -27,12 +27,24 @@ log = logging.getLogger("rhbot.alpaca")
 class AlpacaFeed(DataFeed):
     def __init__(self, client: AlpacaClient,
                  symbol_class: Dict[str, AssetClass],
-                 interval: str = "1d", cache_seconds: int = 30):
+                 interval: str = "1d", cache_seconds: int = 30,
+                 symbol_interval: Optional[Dict[str, str]] = None):
+        """`symbol_interval` overrides `interval` per symbol.
+
+        Crypto is PDT-exempt and can trade intraday while equities at a small
+        account size cannot, so one feed has to serve both bar sizes at once.
+        """
         self.client = client
         self.symbol_class = symbol_class
-        self.timeframe = TIMEFRAMES[interval]
+        self.default_timeframe = TIMEFRAMES[interval]
+        self.symbol_timeframe = {
+            sym: TIMEFRAMES[iv] for sym, iv in (symbol_interval or {}).items()
+        }
         self.cache_seconds = cache_seconds
         self._cache: Dict[str, Tuple[float, List[Bar]]] = {}
+
+    def timeframe_for(self, symbol: str) -> str:
+        return self.symbol_timeframe.get(symbol, self.default_timeframe)
 
     def _is_crypto(self, symbol: str) -> bool:
         return self.symbol_class.get(symbol) == AssetClass.CRYPTO
@@ -47,8 +59,8 @@ class AlpacaFeed(DataFeed):
             return hit[1][-count:]
 
         # Over-fetch a little so a cache entry can serve slightly larger asks.
-        raw = self.client.get_bars(symbol, self.timeframe, max(count, 100),
-                                   self._is_crypto(symbol))
+        raw = self.client.get_bars(symbol, self.timeframe_for(symbol),
+                                   max(count, 100), self._is_crypto(symbol))
         bars: List[Bar] = []
         for b in raw:
             try:
@@ -69,7 +81,8 @@ class AlpacaFeed(DataFeed):
             # Serve stale bars rather than an empty list: the engine reads an
             # empty list as "no data" and the staleness guard already refuses
             # to trade on bars that are too old, so this cannot trade on junk.
-            log.warning("alpaca: no bars for %s (%s)", symbol, self.timeframe)
+            log.warning("alpaca: no bars for %s (%s)", symbol,
+                        self.timeframe_for(symbol))
             return hit[1][-count:] if hit else []
 
         self._cache[symbol] = (now, bars)

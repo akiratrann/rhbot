@@ -139,7 +139,9 @@ class Engine:
         if not bars:
             return True
         age_min = (datetime.now(timezone.utc) - bars[-1].ts).total_seconds() / 60
-        limit = self.cfg.bar_age_limit_minutes
+        # Per-symbol: a 15m symbol judged against the 1d threshold (4 days)
+        # would happily trade on bars from last week.
+        limit = self.cfg.bar_age_limit_for(symbol)
         if age_min > limit:
             if self._stale_logged.get(symbol) != int(age_min // 60):
                 log.info("STALE %s: newest bar is %.0f min old (limit %d) — "

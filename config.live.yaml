@@ -121,22 +121,27 @@ watchlist:
       min_slope_pct: 0.005
     order_notional: 50.0
 
-  # PDT-EXEMPT. 2.7 bps spread. smooth=5/db=0.001 was the best 15m config
-  # (+21.74% vs hold +21.88%); on daily bars smooth=5 keeps the same shape.
+  # PDT-EXEMPT, on 15-MINUTE bars — this is the unlimited-frequency slot.
+  # 26 decisions per session instead of 1, and no day-trade budget to spend.
+  # smooth=5 db=0.001 is the best config measured ON 15m bars (+21.74% vs
+  # buy & hold +21.88%). Params are read in BARS, so these numbers only mean
+  # what they should because bar_interval below says 15m.
   - symbol: BTC-USD
     asset_class: crypto
     strategy: slope_reversal
+    bar_interval: 15m
     params:
       smooth: 5
       min_slope_pct: 0.001
     order_notional: 50.0
 
-  # PDT-EXEMPT. 3.4 bps spread. smooth=8/db=0.001 was its steadiest 15m config
-  # (100% win rate on 4 trades — a tiny sample, so treat it as a shape not a
-  # forecast).
+  # PDT-EXEMPT, 15-MINUTE bars. smooth=8 db=0.001 was its steadiest 15m config
+  # (100% win rate on 4 trades — a tiny sample, so treat that as a shape, not
+  # a forecast).
   - symbol: ETH-USD
     asset_class: crypto
     strategy: slope_reversal
+    bar_interval: 15m
     params:
       smooth: 8
       min_slope_pct: 0.001
@@ -165,7 +170,12 @@ risk:
   # Panic button, works instantly even while you are travelling:
   #   touch state/STOP
   kill_switch_file: state/STOP
-  min_seconds_between_trades: 14400
+  # 15 minutes, matching the crypto bar size. At the old 14400 (4 hours) the
+  # 15m crypto slots would have had 15 of every 16 signals suppressed, which
+  # defeats the point of putting them on intraday bars. The equities are on
+  # daily bars and produce at most one signal a day regardless, so loosening
+  # this does not make them trade more.
+  min_seconds_between_trades: 900
 
   # KEEP ON. At $300 you are far under the $25k threshold, so the 3-per-5-days
   # cap is real. The guard blocks new stock ENTRIES once the budget is spent;
