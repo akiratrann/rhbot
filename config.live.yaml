@@ -33,69 +33,41 @@ alpaca_data_feed: iex
 poll_interval_seconds: 60
 
 # ------------------------------------------------------------
-#  WHY DAILY BARS AND NOT INTRADAY
+#  DEFAULT bar size. Individual symbols override it (see the watchlist).
 #
-#  At $300 equity the Pattern Day Trader rule binds hard: 3 day trades per 5
-#  business days, full stop. "Trade a lot each day" on STOCKS is not available
-#  at this account size — not a config choice, a regulation.
-#
-#  Daily bars with overnight holds are not day trades, so they never touch that
-#  budget. CRYPTO is exempt from PDT entirely and is the only slot here that
-#  can trade as often as the signal fires.
-#
-#  Measured, not assumed: intraday sweeps on 5m bars found no config that beat
-#  buy & hold while staying under 3 day trades/week (sweep_intraday.py).
+#  Equities stay at 1d because intraday round trips ARE day trades, and at
+#  $300 that is 3 per 5 business days. Daily bars with overnight holds never
+#  touch that budget. Measured: on 5m bars no equity config beat buy & hold
+#  while staying under the cap.
 # ------------------------------------------------------------
 bar_interval: 1d
 max_bar_age_minutes:
 
 # ------------------------------------------------------------
-#  $100 per slot, 3 slots = $300 fully deployed.
-#  Symbols and params come from `python relearn.py` — walk-forward validated,
-#  meaning params were chosen on a training window and scored on unseen data.
-#  Re-run relearn.py weekly; it rewrites this list.
+#  SIX slots at $50 = the full $300.
+#
+#  MIXED BAR INTERVALS. Equities read daily bars; BTC and ETH read 15m. That
+#  is possible because bar_interval is settable PER SYMBOL — earlier revisions
+#  of this file said it was not, and that comment was stale.
+#
+#  Why the split: crypto is PDT-exempt, equities are not. At $300 the four
+#  stocks are capped at 3 day trades per 5 business days by regulation, so
+#  intraday bars would only generate signals they are forbidden to act on.
+#  Crypto has no such cap, so it gets the fast lane.
+#
+#  params are read in BARS. `smooth: 5` means five DAYS on an equity and 75
+#  MINUTES on BTC. Each symbol's numbers were tuned on the interval it runs.
+#
+#  Crypto costs, measured directly rather than assumed: BTC 2.7 bps spread,
+#  ETH 3.4 bps, SMCI 2.6 bps. An earlier note here claimed 195 bps and removed
+#  them; that figure came from Alpaca under-deploying one notional order and
+#  was wrong. LTC IS excluded on cost — 59 bps, 20x BTC.
+#
+#  What to expect, honestly: at 25 bps/side over the 7-11 days of intraday
+#  history Alpaca serves, BTC's best 15m config returned +21.74% against buy &
+#  hold +21.88%, ETH +24.86% against +30.18%. A tie and a loss. Crypto is here
+#  for frequency, not because an edge was demonstrated.
 # ------------------------------------------------------------
-# MIRRORS THE PAPER RUN: same five symbols, same params, scaled from $20,000
-# per slot to $60. Alpaca supports fractional shares, so $60 of a $550 stock is
-# a real position rather than a rounding error.
-#
-# Params are walk-forward validated — chosen on a training window, then scored
-# on data the search never saw. Re-run `python relearn.py` weekly to refresh.
-# FOUR slots at $75 = the full $300 deployed. Sized from BUYING POWER, not
-# equity: with $60 already in SMCI there is $240 of cash, and 3 new entries at
-# $75 need $225 of it. Five slots would have forced $48 each; three would mean
-# more concentration per name. Four is the most capital at work without an
-# order that cannot fill.
-#
-# T was dropped — lowest walk-forward edge of the five (+4.28% vs hold), so it
-# was the cheapest slot to reclaim for size.
-# SIX slots at $50 = the full $300.
-#
-# BTC and ETH are back, and the earlier note removing them was WRONG. It cited
-# 195 bps of crypto cost, measured from a single fill where a $20,000 notional
-# order deployed $19,609.95. That gap was Alpaca under-deploying a notional
-# order as a safety buffer — a one-time entry effect — not spread or fees.
-# Measured directly, the spreads are:
-#     BTC 2.7 bps   ETH 3.4 bps   SMCI (equity) 2.6 bps
-# Crypto here is no more expensive to trade than the stocks are.
-#
-# WHY THEY ARE IN: they are the only PDT-exempt instruments available. The four
-# equities are capped at 3 day trades per 5 business days at this account size;
-# these two are not, so they are the only slots that can act on every slope
-# flip rather than a handful per week.
-#
-# WHAT TO EXPECT: at a realistic 25 bps/side over the 7-11 days of intraday
-# history Alpaca serves, BTC's best config returned +21.74% against buy & hold
-# +21.88%, and ETH +24.86% against +30.18%. A tie and a loss. They are here for
-# frequency, not because they were shown to beat holding.
-#
-# NOTE the bar interval is still 1d for everything. Trading crypto on every
-# intraday zero-crossing needs a SEPARATE process on 15m bars — see
-# config.live.crypto.yaml. Mixing intervals in one config is not possible:
-# `smooth: 5` would mean 5 days for the stocks and 75 minutes for the crypto.
-#
-# LTC and the smaller coins were NOT added: LTC's spread is 59 bps, 20x BTC's.
-# Those genuinely are fee generators.
 watchlist:
   # semis | walk-forward edge +91.49% vs hold, 16 round trips, 27% max DD
   - symbol: SMCI
