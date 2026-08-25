@@ -19,10 +19,16 @@ log = logging.getLogger("rhbot.risk")
 
 
 class RiskManager:
+    #: A daily-loss halt stops NEW RISK but must never trap you in a position.
+    #: A kill switch is a human saying "freeze everything" and does stop exits.
+    HALT_ENTRIES_ONLY = "entries"
+    HALT_EVERYTHING = "all"
+
     def __init__(self, cfg: RiskConfig):
         self.cfg = cfg
         self._halted = False
         self._halt_reason = ""
+        self._halt_kind = self.HALT_EVERYTHING
 
     # ---- global halts -----------------------------------------------------
 
@@ -32,24 +38,36 @@ class RiskManager:
     def halt_reason(self) -> str:
         return self._halt_reason
 
-    def _halt(self, reason: str) -> None:
+    def _halt(self, reason: str, kind: str = "all") -> None:
         if not self._halted:
-            log.error("TRADING HALTED: %s", reason)
+            log.error("TRADING HALTED (%s): %s",
+                      "exits still allowed" if kind == "entries"
+                      else "including exits", reason)
         self._halted = True
         self._halt_reason = reason
+        self._halt_kind = kind
+
+    def blocks_exits(self) -> bool:
+        return self._halted and self._halt_kind == self.HALT_EVERYTHING
 
     def check_global_halts(self, portfolio: Portfolio,
                            prices: Dict[str, float]) -> bool:
         """Evaluate kill switch + daily loss. Returns True if halted."""
         if os.path.exists(self.cfg.kill_switch_file):
-            self._halt(f"kill switch file present ({self.cfg.kill_switch_file})")
+            # Explicit human freeze: stop everything, exits included.
+            self._halt(f"kill switch file present ({self.cfg.kill_switch_file})",
+                       self.HALT_EVERYTHING)
             return True
 
         daily = portfolio.daily_pnl(prices)
         if daily <= self.cfg.max_daily_loss:
+            # Stop taking NEW risk, but keep evaluating exits. This fires
+            # precisely when things are going badly, which is the moment you
+            # most need to be able to get out.
             self._halt(f"daily loss {daily:.2f} hit limit "
-                       f"{self.cfg.max_daily_loss:.2f}")
-            return True
+                       f"{self.cfg.max_daily_loss:.2f}",
+                       self.HALT_ENTRIES_ONLY)
+            return False
         return False
 
     # ---- per-order checks -------------------------------------------------
@@ -57,8 +75,10 @@ class RiskManager:
     def check(self, order: Order, portfolio: Portfolio,
               prices: Dict[str, float]) -> Optional[str]:
         """Return a rejection reason, or None if the order is allowed."""
-        if self._halted:
+        if self.blocks_exits():
             return f"trading halted: {self._halt_reason}"
+        if self._halted and order.side == Side.BUY:
+            return f"no new entries: {self._halt_reason}"
 
         if order.notional <= 0:
             return "non-positive notional"

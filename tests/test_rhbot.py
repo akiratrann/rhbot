@@ -167,14 +167,20 @@ def test_kill_switch_halts(tmp_path):
 
 
 def test_daily_loss_halts(tmp_path):
-    r = _risk()
-    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
-    p.cash = 9_800.0  # down $200 vs the -100 limit
-    assert r.check_global_halts(p, {}) is True
+    """Halts trading, but deliberately does NOT abort the tick.
+
+    Returning False here is the point: the engine keeps processing symbols so
+    exits can still fire. Only the kill switch stops everything.
+    """
+    r = _risk(max_daily_loss=-100)
+    p = Portfolio(1000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+
+    assert r.check_global_halts(p, {"X": 50.0}) is False
+    assert r.halted() is True
+    assert r.blocks_exits() is False
     assert "daily loss" in r.halt_reason()
 
-
-# ---- strategies -----------------------------------------------------------
 
 def test_sma_crossover_rejects_bad_periods():
     with pytest.raises(ValueError):
@@ -596,3 +602,47 @@ def test_orphan_exit_is_submitted(tmp_path):
     strat.evaluate = lambda *a, **kw: Signal("ORPHAN", SignalType.EXIT_LONG, "x")
     engine._process_symbol("ORPHAN", {"ORPHAN": 100.0})
     assert len(submitted) == 1 and submitted[0].side == Side.SELL
+
+
+# ---- a daily-loss halt must not trap you in a position ---------------------
+
+def test_daily_loss_halt_blocks_entries(tmp_path):
+    r = _risk(max_daily_loss=-100)
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.day_start_equity = 10_000.0
+    r.check_global_halts(p, {})
+    r._halt("daily loss", r.HALT_ENTRIES_ONLY)
+    o = Order("X", AssetClass.STOCK, Side.BUY, 100.0)
+    assert "no new entries" in r.check(o, p, {})
+
+
+def test_daily_loss_halt_still_allows_exits(tmp_path):
+    """It fires when losing — the moment you most need to be able to sell."""
+    r = _risk(max_daily_loss=-100)
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 10.0))
+    r._halt("daily loss", r.HALT_ENTRIES_ONLY)
+    o = Order("X", AssetClass.STOCK, Side.SELL, 100.0)
+    assert r.check(o, p, {"X": 10.0}) is None
+
+
+def test_kill_switch_blocks_exits_too(tmp_path):
+    """A human freeze is different: it means stop everything, deliberately."""
+    r = _risk()
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 10.0))
+    r._halt("kill switch", r.HALT_EVERYTHING)
+    o = Order("X", AssetClass.STOCK, Side.SELL, 100.0)
+    assert "trading halted" in r.check(o, p, {"X": 10.0})
+
+
+def test_daily_loss_does_not_stop_the_tick(tmp_path):
+    """check_global_halts must return False so exits still get evaluated."""
+    cfg = RiskConfig(max_daily_loss=-1.0, kill_switch_file="/nonexistent/STOP")
+    r = RiskManager(cfg)
+    p = Portfolio(1_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    stopped = r.check_global_halts(p, {"X": 50.0})   # big loss
+    assert stopped is False, "tick aborted; exits would never be considered"
+    assert r.halted() is True
+    assert r.blocks_exits() is False
