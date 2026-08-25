@@ -2,6 +2,7 @@
 
 from .base import Strategy
 from .sma_crossover import SmaCrossover
+from .slope_regression import SlopeRegression
 from .slope_reversal import SlopeReversal
 from .swing_trend import SwingTrend
 from .trend_follow import TrendFollow
@@ -10,6 +11,7 @@ from .trend_follow import TrendFollow
 REGISTRY = {
     "sma_crossover": SmaCrossover,
     "slope_reversal": SlopeReversal,
+    "slope_regression": SlopeRegression,
     "swing_trend": SwingTrend,
     "trend_follow": TrendFollow,
 }

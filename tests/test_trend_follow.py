@@ -121,3 +121,34 @@ def test_flat_position_object_is_treated_as_no_position():
     rising = [10, 11, 12, 13, 14, 15, 16, 17, 18, 20]
     sig = s.evaluate("X", mkbars(rising), long_position(qty=0.0))
     assert sig.type == SignalType.ENTER_LONG
+
+
+# ---- least-squares derivative ---------------------------------------------
+
+def test_regression_slope_recovers_a_known_line():
+    from rhbot.strategy.slope_regression import regression_slope
+    assert regression_slope([1, 4, 7, 10]) == pytest.approx(3.0)
+    assert regression_slope([10, 7, 4, 1]) == pytest.approx(-3.0)
+    assert regression_slope([5, 5, 5, 5]) == pytest.approx(0.0)
+
+
+def test_regression_slope_is_steadier_than_a_two_point_difference():
+    """The whole premise: differencing amplifies noise, regression averages it."""
+    from rhbot.strategy.slope_regression import regression_slope
+    clean = [100 + i for i in range(10)]                    # true slope = 1
+    noisy = [v + (2 if i % 2 else -2) for i, v in enumerate(clean)]
+    two_point = noisy[-1] - noisy[-2]
+    reg = regression_slope(noisy)
+    assert abs(reg - 1.0) < abs(two_point - 1.0)
+
+
+def test_regression_window_must_be_sane():
+    from rhbot.strategy.slope_regression import SlopeRegression
+    with pytest.raises(ValueError, match="window must be"):
+        SlopeRegression({"window": 2})
+
+
+def test_registered_under_its_config_name():
+    from rhbot.strategy import build_strategy
+    from rhbot.strategy.slope_regression import SlopeRegression
+    assert isinstance(build_strategy("slope_regression", {}), SlopeRegression)
