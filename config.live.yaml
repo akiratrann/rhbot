@@ -44,11 +44,15 @@ bar_interval: 1d
 max_bar_age_minutes:
 
 # ------------------------------------------------------------
-#  NINE slots at $30 = $270 deployed, $30 held back.
+#  ELEVEN slots at $22 = $242 if every one fills, against $300 of equity.
 #
-#  The buffer is deliberate: $60 is already in SMCI, leaving $240 of cash, and
-#  six new entries at $40 need exactly $240. Sizing to the last dollar means
-#  the final order rejects on any rounding or price move.
+#  Sized from CASH, not equity: $60 is already in SMCI, leaving $240. Ten new
+#  entries at $22 need $220, which clears with room. Sizing to the last dollar
+#  makes the final order reject on any price move.
+#
+#  All four symbols that survived a two-fold walk-forward are now here: UNH,
+#  LMT, SNOW, VZ. Of 117 screened, 56% beat buy & hold in one window and only
+#  3% in both — that gap is the single-split illusion, measured.
 #
 #  MIXED BAR INTERVALS. Equities read daily bars; BTC and ETH read 15m. That
 #  is possible because bar_interval is settable PER SYMBOL — earlier revisions
@@ -80,7 +84,7 @@ watchlist:
     params:
       smooth: 2
       min_slope_pct: 0.01
-    order_notional: 30.0
+    order_notional: 22.0
 
   # e-commerce | edge +40.51%, 8 round trips, 22.8% max DD
   - symbol: SHOP
@@ -89,7 +93,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.002
-    order_notional: 30.0
+    order_notional: 22.0
 
   # tech/social | edge +19.37%, 18 round trips — the largest sample here
   - symbol: META
@@ -98,7 +102,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.002
-    order_notional: 30.0
+    order_notional: 22.0
 
   # software | edge +17.72%, 6 round trips
   - symbol: MSFT
@@ -107,7 +111,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.005
-    order_notional: 30.0
+    order_notional: 22.0
 
   # Survived a TWO-FOLD walk-forward: +53.43% and +21.01% edge over buy & hold
   # in two independent out-of-sample windows, 21.8% max drawdown. Only 4 of 117
@@ -118,7 +122,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.002
-    order_notional: 30.0
+    order_notional: 22.0
 
   # Also cleared both folds: +14.27% and +23.85% edge, and the LOWEST drawdown
   # of any survivor at 11.0%. The steadiest name on this list.
@@ -128,7 +132,7 @@ watchlist:
     params:
       smooth: 1
       min_slope_pct: 0.01
-    order_notional: 30.0
+    order_notional: 22.0
 
   # ADDED BY REQUEST as a high-volatility day mover — a different selection
   # criterion from backtest edge, and a legitimate one. Its walk-forward record
@@ -144,7 +148,30 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.002
-    order_notional: 30.0
+    order_notional: 22.0
+
+  # Fourth two-fold survivor. HIGHEST RETURN of the four: +8.27% and +73.29%
+  # in the two out-of-sample windows. Also the roughest — 38.7% max drawdown,
+  # which is why an earlier version of this list excluded it. That exclusion
+  # was my conservatism, not your instruction, and it is reversed here.
+  - symbol: SNOW
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.01
+    order_notional: 22.0
+
+  # Fourth-ranked survivor: +20.82% and +16.85% returns, 11.1% max drawdown.
+  # Its worst-fold EDGE over buy & hold was only +2.70%, thin enough that it
+  # could be noise. In on consistency, not on conviction.
+  - symbol: VZ
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 2
+      min_slope_pct: 0.005
+    order_notional: 22.0
 
   # PDT-EXEMPT, on 15-MINUTE bars — this is the unlimited-frequency slot.
   # 26 decisions per session instead of 1, and no day-trade budget to spend.
@@ -158,7 +185,7 @@ watchlist:
     params:
       smooth: 5
       min_slope_pct: 0.001
-    order_notional: 30.0
+    order_notional: 22.0
 
   # PDT-EXEMPT, 15-MINUTE bars. smooth=8 db=0.001 was its steadiest 15m config
   # (100% win rate on 4 trades — a tiny sample, so treat that as a shape, not
@@ -170,7 +197,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.001
-    order_notional: 30.0
+    order_notional: 22.0
 
 # ------------------------------------------------------------
 #  Risk limits — the last gate before any order. Tighten, don't loosen.
@@ -178,9 +205,9 @@ watchlist:
 risk:
   # Headroom above the $100 entry size. Exits skip this gate entirely (see
   # risk.py) so a winner can never grow too large to sell.
-  max_order_notional: 45.0
+  max_order_notional: 35.0
   max_total_exposure: 300.0
-  max_open_positions: 9
+  max_open_positions: 11
   # HALT EFFECTIVELY LIFTED at your request. -300 is the whole account, so on a
   # long-only cash account with no margin this can never trigger before there
   # is nothing left to protect.

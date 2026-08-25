@@ -41,7 +41,7 @@ LRCX KLAC AMAT ADI TXN MCHP ON SWKS TER ENPH FSLR RIVN LCID
 SYMBOLS = sorted(set(UNIVERSE.split()))
 
 MIN_RT = 5
-MAX_DD = 40.0
+MAX_DD = 100.0   # effectively off: ranking on RETURN, not safety
 
 
 def fold(bars, lo, mid, hi, sym):
@@ -97,8 +97,11 @@ def passes(r):
             and a["rt"] >= MIN_RT and b["rt"] >= MIN_RT
             and a["dd"] <= MAX_DD and b["dd"] <= MAX_DD)
 
+# Rank by the WORSE of the two folds' RETURN. Using the worse fold rather than
+# the average is the one conservatism worth keeping: it asks "how did this do
+# in its bad window", not "how good does the average look".
 survivors = sorted((r for r in rows if passes(r)),
-                   key=lambda r: min(r["f1"]["edge"], r["f2"]["edge"]),
+                   key=lambda r: min(r["f1"]["test"], r["f2"]["test"]),
                    reverse=True)
 
 print(f"\nScreened {len(rows)} of {len(SYMBOLS)} symbols on TWO independent "
@@ -113,13 +116,13 @@ print(f"  passed BOTH windows              : {both}/{len(rows)} "
       f"({both/len(rows)*100:.0f}%)\n")
 
 if survivors:
-    print(f"  {'SYM':6} {'params':<22} {'fold1 edge':>11} {'fold2 edge':>11} "
+    print(f"  {'SYM':6} {'params':<22} {'fold1 ret':>11} {'fold2 ret':>11} "
           f"{'worst':>8} {'rt':>7} {'maxDD':>7}")
     for r in survivors[:15]:
         a, b = r["f1"], r["f2"]
         pa = f"smooth={a['p']['smooth']} db={a['p']['min_slope_pct']}"
-        print(f"  {r['symbol']:6} {pa:<22} {a['edge']:>+10.2f}% "
-              f"{b['edge']:>+10.2f}% {min(a['edge'],b['edge']):>+7.2f}% "
+        print(f"  {r['symbol']:6} {pa:<22} {a['test']:>+10.2f}% "
+              f"{b['test']:>+10.2f}% {min(a['test'],b['test']):>+7.2f}% "
               f"{a['rt']:>3}/{b['rt']:<3} {max(a['dd'],b['dd']):>6.1f}%")
 else:
     print("  NOTHING passed both windows.")
