@@ -57,19 +57,33 @@ max_bar_age_minutes:
 #
 # T was dropped — lowest walk-forward edge of the five (+4.28% vs hold), so it
 # was the cheapest slot to reclaim for size.
-# SIX slots at $50 = the full $300, chosen for breadth over position size.
-# Six sectors instead of four, at the cost of $50 orders rather than $75.
+# SIX slots at $50 = the full $300.
 #
-# BTC IS GONE, and this is the most important change in the file. A real paper
-# fill showed a $20,000 crypto order deploying $19,609.95 — 195 bps of
-# spread+fee on ONE side, ~3.9% per round trip. Equity fills on the same day
-# lost 0-2 bps. Re-running the crypto sweep with the MEASURED cost instead of
-# the assumed 10 bps turned its best config from +22.71% (a tie with holding)
-# into +12.85% against +22.43% — a clear loss. Crypto here is a fee generator.
+# BTC and ETH are back, and the earlier note removing them was WRONG. It cited
+# 195 bps of crypto cost, measured from a single fill where a $20,000 notional
+# order deployed $19,609.95. That gap was Alpaca under-deploying a notional
+# order as a safety buffer — a one-time entry effect — not spread or fees.
+# Measured directly, the spreads are:
+#     BTC 2.7 bps   ETH 3.4 bps   SMCI (equity) 2.6 bps
+# Crypto here is no more expensive to trade than the stocks are.
 #
-# The cost of dropping it: nothing else in this list is PDT-exempt, so all six
-# slots are capped at 3 day trades per 5 business days. Daily bars with
-# overnight holds do not consume that budget, which is why bar_interval is 1d.
+# WHY THEY ARE IN: they are the only PDT-exempt instruments available. The four
+# equities are capped at 3 day trades per 5 business days at this account size;
+# these two are not, so they are the only slots that can act on every slope
+# flip rather than a handful per week.
+#
+# WHAT TO EXPECT: at a realistic 25 bps/side over the 7-11 days of intraday
+# history Alpaca serves, BTC's best config returned +21.74% against buy & hold
+# +21.88%, and ETH +24.86% against +30.18%. A tie and a loss. They are here for
+# frequency, not because they were shown to beat holding.
+#
+# NOTE the bar interval is still 1d for everything. Trading crypto on every
+# intraday zero-crossing needs a SEPARATE process on 15m bars — see
+# config.live.crypto.yaml. Mixing intervals in one config is not possible:
+# `smooth: 5` would mean 5 days for the stocks and 75 minutes for the crypto.
+#
+# LTC and the smaller coins were NOT added: LTC's spread is 59 bps, 20x BTC's.
+# Those genuinely are fee generators.
 watchlist:
   # semis | walk-forward edge +91.49% vs hold, 16 round trips, 27% max DD
   - symbol: SMCI
@@ -107,22 +121,25 @@ watchlist:
       min_slope_pct: 0.005
     order_notional: 50.0
 
-  # industrials/aero | edge +15.99%, 8 round trips, 16% max DD
-  - symbol: BA
-    asset_class: stock
+  # PDT-EXEMPT. 2.7 bps spread. smooth=5/db=0.001 was the best 15m config
+  # (+21.74% vs hold +21.88%); on daily bars smooth=5 keeps the same shape.
+  - symbol: BTC-USD
+    asset_class: crypto
     strategy: slope_reversal
     params:
-      smooth: 3
-      min_slope_pct: 0.005
+      smooth: 5
+      min_slope_pct: 0.001
     order_notional: 50.0
 
-  # retail | edge +14.69%, 15 round trips, 8.2% max DD — the calm anchor
-  - symbol: HD
-    asset_class: stock
+  # PDT-EXEMPT. 3.4 bps spread. smooth=8/db=0.001 was its steadiest 15m config
+  # (100% win rate on 4 trades — a tiny sample, so treat it as a shape not a
+  # forecast).
+  - symbol: ETH-USD
+    asset_class: crypto
     strategy: slope_reversal
     params:
       smooth: 8
-      min_slope_pct: 0.0
+      min_slope_pct: 0.001
     order_notional: 50.0
 
 # ------------------------------------------------------------
