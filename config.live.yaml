@@ -44,7 +44,11 @@ bar_interval: 1d
 max_bar_age_minutes:
 
 # ------------------------------------------------------------
-#  SIX slots at $50 = the full $300.
+#  SEVEN slots at $40 = $280 deployed, $20 held back.
+#
+#  The buffer is deliberate: $60 is already in SMCI, leaving $240 of cash, and
+#  six new entries at $40 need exactly $240. Sizing to the last dollar means
+#  the final order rejects on any rounding or price move.
 #
 #  MIXED BAR INTERVALS. Equities read daily bars; BTC and ETH read 15m. That
 #  is possible because bar_interval is settable PER SYMBOL — earlier revisions
@@ -76,7 +80,7 @@ watchlist:
     params:
       smooth: 2
       min_slope_pct: 0.01
-    order_notional: 50.0
+    order_notional: 40.0
 
   # e-commerce | edge +40.51%, 8 round trips, 22.8% max DD
   - symbol: SHOP
@@ -85,7 +89,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.002
-    order_notional: 50.0
+    order_notional: 40.0
 
   # tech/social | edge +19.37%, 18 round trips — the largest sample here
   - symbol: META
@@ -94,7 +98,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.002
-    order_notional: 50.0
+    order_notional: 40.0
 
   # software | edge +17.72%, 6 round trips
   - symbol: MSFT
@@ -103,7 +107,21 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.005
-    order_notional: 50.0
+    order_notional: 40.0
+
+  # ADDED BY REQUEST. Its walk-forward record is the WORST of this list:
+  #   test -60.21% vs buy & hold -43.84% (edge -16.38%), 65.3% max drawdown.
+  # It lost money out of sample, lost to holding, and drew down two thirds.
+  # The +119% figure associated with DUOL earlier was IN-SAMPLE — chosen after
+  # seeing the answer. Sized the same as the others; at $40 a 65% drawdown is
+  # about $26.
+  - symbol: DUOL
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 3
+      min_slope_pct: 0.002
+    order_notional: 40.0
 
   # PDT-EXEMPT, on 15-MINUTE bars — this is the unlimited-frequency slot.
   # 26 decisions per session instead of 1, and no day-trade budget to spend.
@@ -117,7 +135,7 @@ watchlist:
     params:
       smooth: 5
       min_slope_pct: 0.001
-    order_notional: 50.0
+    order_notional: 40.0
 
   # PDT-EXEMPT, 15-MINUTE bars. smooth=8 db=0.001 was its steadiest 15m config
   # (100% win rate on 4 trades — a tiny sample, so treat that as a shape, not
@@ -129,7 +147,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.001
-    order_notional: 50.0
+    order_notional: 40.0
 
 # ------------------------------------------------------------
 #  Risk limits — the last gate before any order. Tighten, don't loosen.
@@ -137,9 +155,9 @@ watchlist:
 risk:
   # Headroom above the $100 entry size. Exits skip this gate entirely (see
   # risk.py) so a winner can never grow too large to sell.
-  max_order_notional: 75.0
+  max_order_notional: 60.0
   max_total_exposure: 300.0
-  max_open_positions: 6
+  max_open_positions: 7
   # HALT EFFECTIVELY LIFTED at your request. -300 is the whole account, so on a
   # long-only cash account with no margin this can never trigger before there
   # is nothing left to protect.
