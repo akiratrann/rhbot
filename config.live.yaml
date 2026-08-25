@@ -134,11 +134,17 @@ risk:
   max_order_notional: 75.0
   max_total_exposure: 300.0
   max_open_positions: 6
-  # 15% of the account, loosened from 10%. SMCI and SHOP carry 27% and 23% max
-  # drawdowns; at -$30 an ordinary bad session on two of them would halt the
-  # bot outright. This should catch something breaking, not normal volatility.
-  # It is still a hard floor: at -$45 everything stops for the day.
-  max_daily_loss: -45.0
+  # HALT EFFECTIVELY LIFTED at your request. -300 is the whole account, so on a
+  # long-only cash account with no margin this can never trigger before there
+  # is nothing left to protect.
+  #
+  # What still bounds the downside, and why lifting this is defensible here:
+  #   - long-only, no margin, no shorting -> the account cannot go below $0
+  #   - max_total_exposure caps deployed capital at the balance
+  #   - state/STOP still halts everything instantly, from anywhere
+  # What you gave up: the circuit breaker that catches a BUG. If a bad feed or
+  # a broken strategy starts churning, nothing now stops it mid-day except you.
+  max_daily_loss: -300.0
   # Panic button, works instantly even while you are travelling:
   #   touch state/STOP
   kill_switch_file: state/STOP
