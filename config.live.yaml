@@ -44,6 +44,19 @@ bar_interval: 1d
 max_bar_age_minutes:
 
 # ------------------------------------------------------------
+#  2-DAY MAX HOLD on every equity. Requested, and measured before applying:
+#  out-of-sample across 18 symbols, a 2-day cap returned +13.76% mean (46% win
+#  rate, ~78 round trips) against +50.40% uncapped (41% win, ~51 trips).
+#  It trades 50% more often and wins more often, for LESS total return — the
+#  cap takes small wins while losers still run to the limit. That trade was
+#  made deliberately: more activity, lower expectancy per trade.
+#
+#  PDT-SAFE: an overnight hold is not a day trade. Only SAME-DAY round trips
+#  count against the 3-per-5-days budget, so 2-day holds are unlimited at $300.
+#
+#  Crypto has no cap — it is PDT-exempt and already exits on its own 15m
+#  signals, typically well inside two days.
+#
 #  ELEVEN slots at $22 = $242 if every one fills, against $300 of equity.
 #
 #  Sized from CASH, not equity: $60 is already in SMCI, leaving $240. Ten new
@@ -84,6 +97,7 @@ watchlist:
     params:
       smooth: 2
       min_slope_pct: 0.01
+    max_hold_days: 2
     order_notional: 22.0
 
   # e-commerce | edge +40.51%, 8 round trips, 22.8% max DD
@@ -93,6 +107,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.002
+    max_hold_days: 2
     order_notional: 22.0
 
   # tech/social | edge +19.37%, 18 round trips — the largest sample here
@@ -102,6 +117,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.002
+    max_hold_days: 2
     order_notional: 22.0
 
   # software | edge +17.72%, 6 round trips
@@ -111,6 +127,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.005
+    max_hold_days: 2
     order_notional: 22.0
 
   # Survived a TWO-FOLD walk-forward: +53.43% and +21.01% edge over buy & hold
@@ -122,6 +139,7 @@ watchlist:
     params:
       smooth: 8
       min_slope_pct: 0.002
+    max_hold_days: 2
     order_notional: 22.0
 
   # Also cleared both folds: +14.27% and +23.85% edge, and the LOWEST drawdown
@@ -132,6 +150,7 @@ watchlist:
     params:
       smooth: 1
       min_slope_pct: 0.01
+    max_hold_days: 2
     order_notional: 22.0
 
   # ADDED BY REQUEST as a high-volatility day mover — a different selection
@@ -148,6 +167,7 @@ watchlist:
     params:
       smooth: 3
       min_slope_pct: 0.002
+    max_hold_days: 2
     order_notional: 22.0
 
   # Fourth two-fold survivor. HIGHEST RETURN of the four: +8.27% and +73.29%
@@ -160,6 +180,7 @@ watchlist:
     params:
       smooth: 2
       min_slope_pct: 0.01
+    max_hold_days: 2
     order_notional: 22.0
 
   # Fourth-ranked survivor: +20.82% and +16.85% returns, 11.1% max drawdown.
@@ -171,6 +192,7 @@ watchlist:
     params:
       smooth: 2
       min_slope_pct: 0.005
+    max_hold_days: 2
     order_notional: 22.0
 
   # PDT-EXEMPT, on 15-MINUTE bars — this is the unlimited-frequency slot.

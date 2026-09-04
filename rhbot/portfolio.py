@@ -45,6 +45,10 @@ class Portfolio:
         today = market_date(fill.ts)
 
         if fill.side == Side.BUY:
+            # Stamp the age clock only when opening from flat. Adding to a
+            # position must not restart it, or a holding limit never triggers.
+            if pos.quantity <= 1e-9:
+                pos.opened_ts = fill.ts.isoformat()
             new_qty = pos.quantity + fill.quantity
             # Weighted-average cost basis.
             if new_qty > 0:
@@ -67,6 +71,7 @@ class Portfolio:
                 pos.quantity = 0.0
                 pos.avg_price = 0.0
                 pos.last_buy_date = None
+                pos.opened_ts = None
 
         self.fills.append({**asdict(fill), "ts": fill.ts.isoformat(),
                            "asset_class": fill.asset_class.value,
@@ -131,6 +136,7 @@ class Portfolio:
                     "quantity": p.quantity,
                     "avg_price": p.avg_price,
                     "last_buy_date": p.last_buy_date,
+                    "opened_ts": p.opened_ts,
                 }
                 for s, p in self.positions.items()
             },
@@ -164,6 +170,7 @@ class Portfolio:
                 quantity=pd["quantity"],
                 avg_price=pd["avg_price"],
                 last_buy_date=pd.get("last_buy_date"),
+                opened_ts=pd.get("opened_ts"),
             )
         return p
 

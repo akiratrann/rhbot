@@ -646,3 +646,91 @@ def test_daily_loss_does_not_stop_the_tick(tmp_path):
     assert stopped is False, "tick aborted; exits would never be considered"
     assert r.halted() is True
     assert r.blocks_exits() is False
+
+
+# ---- time-based exit -------------------------------------------------------
+
+def _hold_engine(tmp_path, max_hold_days):
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0,
+                             max_hold_days=max_hold_days)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=0))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    return Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk)), p
+
+
+def test_position_records_when_it_opened(tmp_path):
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    assert p.positions["X"].opened_ts is not None
+
+
+def test_adding_to_a_position_does_not_reset_its_age(tmp_path):
+    """Otherwise topping up restarts the clock and the cap never fires."""
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    first = datetime.now(timezone.utc) - timedelta(days=5)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0, ts=first))
+    stamped = p.positions["X"].opened_ts
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 101.0))
+    assert p.positions["X"].opened_ts == stamped
+
+
+def test_closing_clears_the_age(tmp_path):
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.SELL, 10, 101.0))
+    assert p.positions["X"].opened_ts is None
+
+
+def test_age_survives_a_restart(tmp_path):
+    path = str(tmp_path / "s.json")
+    p = Portfolio(10_000.0, path)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    p.save()
+    assert Portfolio.load_or_new(10_000.0, path).positions["X"].opened_ts \
+        == p.positions["X"].opened_ts
+
+
+def test_old_position_is_force_exited(tmp_path):
+    engine, p = _hold_engine(tmp_path, max_hold_days=2)
+    old = datetime.now(timezone.utc) - timedelta(days=3)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0, ts=old))
+    submitted = []
+    engine.broker.submit = lambda o: submitted.append(o) or None
+    engine._process_symbol("X", {"X": 100.0})
+    assert len(submitted) == 1 and submitted[0].side == Side.SELL
+
+
+def test_young_position_is_left_alone(tmp_path):
+    engine, p = _hold_engine(tmp_path, max_hold_days=2)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    submitted = []
+    engine.broker.submit = lambda o: submitted.append(o) or None
+    engine._process_symbol("X", {"X": 100.0})
+    assert submitted == []
+
+
+def test_no_limit_configured_means_no_forced_exit(tmp_path):
+    engine, p = _hold_engine(tmp_path, max_hold_days=None)
+    old = datetime.now(timezone.utc) - timedelta(days=99)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0, ts=old))
+    submitted = []
+    engine.broker.submit = lambda o: submitted.append(o) or None
+    engine._process_symbol("X", {"X": 100.0})
+    assert submitted == []
+
+
+def test_missing_timestamp_never_forces_an_exit(tmp_path):
+    """A blank stamp must not read as 'infinitely old'."""
+    engine, p = _hold_engine(tmp_path, max_hold_days=2)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    p.positions["X"].opened_ts = None
+    submitted = []
+    engine.broker.submit = lambda o: submitted.append(o) or None
+    engine._process_symbol("X", {"X": 100.0})
+    assert submitted == []

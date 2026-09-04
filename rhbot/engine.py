@@ -152,6 +152,24 @@ class Engine:
         self._stale_logged.pop(symbol, None)
         return False
 
+    @staticmethod
+    def _position_age_days(position) -> Optional[float]:
+        """Days since the position was OPENED, or None if unknown.
+
+        None on unparseable/missing stamps rather than 0: a missing timestamp
+        must never read as "infinitely old" and force an unwanted exit.
+        """
+        raw = getattr(position, "opened_ts", None)
+        if not raw:
+            return None
+        try:
+            opened = datetime.fromisoformat(raw)
+        except (TypeError, ValueError):
+            return None
+        if opened.tzinfo is None:
+            opened = opened.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - opened).total_seconds() / 86400.0
+
     def _orphan(self, symbol: str):
         """Strategy + watch item for a held symbol that left the watchlist.
 
@@ -189,6 +207,20 @@ class Engine:
             position = None
 
         signal: Signal = strat.evaluate(symbol, bars, position)
+
+        # Time-based exit, overriding the strategy. Measured out of sample: a
+        # 2-day cap trades ~78 round trips vs ~51 uncapped and wins 46% vs 41%,
+        # for less total return — it takes small wins and lets losers reach the
+        # cap. Deliberate trade: more activity, lower expectancy per trade.
+        # An overnight hold is not a day trade, so this stays PDT-safe.
+        limit = None if item is None else item.max_hold_days
+        if (limit and position is not None and position.quantity > 0
+                and signal.type != SignalType.EXIT_LONG):
+            age = self._position_age_days(position)
+            if age is not None and age >= limit:
+                signal = Signal(symbol, SignalType.EXIT_LONG,
+                                f"max hold {limit:g}d reached ({age:.1f}d)")
+
         if signal.type == SignalType.HOLD:
             return
 

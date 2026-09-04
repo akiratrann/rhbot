@@ -4,7 +4,12 @@
     {
       "name": "payback",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/akiratran/payback", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/akiratran/payback",
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     },
@@ -33,6 +38,18 @@
         "3210"
       ],
       "port": 3210
+    },
+    {
+      "name": "bunbu",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5180",
+        "--directory",
+        "/Users/akiratran/aetherion-studio/game"
+      ],
+      "port": 5180
     }
   ]
 }

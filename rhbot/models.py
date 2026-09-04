@@ -75,6 +75,11 @@ class Position:
     #: US/Eastern date (YYYY-MM-DD) of the most recent BUY. Selling on this same
     #: date makes the round trip a "day trade" under the PDT rule.
     last_buy_date: Optional[str] = None
+    #: ISO timestamp of the fill that opened this position from flat. Needed
+    #: for a time-based exit: `last_buy_date` only records the most recent BUY,
+    #: so a position added to would keep resetting its own age and never hit a
+    #: holding limit.
+    opened_ts: Optional[str] = None
 
     def market_value(self, last_price: float) -> float:
         return self.quantity * last_price
