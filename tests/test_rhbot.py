@@ -734,3 +734,79 @@ def test_missing_timestamp_never_forces_an_exit(tmp_path):
     engine.broker.submit = lambda o: submitted.append(o) or None
     engine._process_symbol("X", {"X": 100.0})
     assert submitted == []
+
+
+# ---- never_sell_at_loss ----------------------------------------------------
+
+def _nsal_engine(tmp_path, on, min_profit=0.05, max_hold=None):
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0,
+                             max_hold_days=max_hold)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=0,
+                        never_sell_at_loss=on, min_profit_pct=min_profit))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0))
+    e = Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk))
+    sent = []
+    e.broker.submit = lambda o: sent.append(o) or None
+    from rhbot.models import Signal, SignalType
+    e.strategies["X"].evaluate = lambda *a, **kw: Signal(
+        "X", SignalType.EXIT_LONG, "test exit")
+    return e, sent
+
+
+def test_losing_exit_is_blocked_when_enabled(tmp_path):
+    e, sent = _nsal_engine(tmp_path, on=True)
+    e._process_symbol("X", {"X": 95.0})          # below the $100 cost
+    assert sent == []
+
+
+def test_winning_exit_still_goes_through(tmp_path):
+    e, sent = _nsal_engine(tmp_path, on=True)
+    e._process_symbol("X", {"X": 110.0})
+    assert len(sent) == 1 and sent[0].side == Side.SELL
+
+
+def test_breakeven_is_blocked_because_costs_make_it_a_loss(tmp_path):
+    """Selling at exactly cost nets negative after fees."""
+    e, sent = _nsal_engine(tmp_path, on=True, min_profit=0.05)
+    e._process_symbol("X", {"X": 100.0})
+    assert sent == []
+    e2, sent2 = _nsal_engine(tmp_path, on=True, min_profit=0.05)
+    e2._process_symbol("X", {"X": 100.06})       # clears the floor
+    assert len(sent2) == 1
+
+
+def test_disabled_by_default_lets_losses_out(tmp_path):
+    e, sent = _nsal_engine(tmp_path, on=False)
+    e._process_symbol("X", {"X": 95.0})
+    assert len(sent) == 1
+
+
+def test_it_overrides_the_max_hold_cap(tmp_path):
+    """The direct consequence: an underwater position is held past its limit."""
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    from rhbot.models import Signal, SignalType
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0,
+                             max_hold_days=2)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=0, never_sell_at_loss=True))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    old = datetime.now(timezone.utc) - timedelta(days=99)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 10, 100.0, ts=old))
+    e = Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk))
+    sent = []
+    e.broker.submit = lambda o: sent.append(o) or None
+    e.strategies["X"].evaluate = lambda *a, **kw: Signal(
+        "X", SignalType.HOLD, "no signal")
+    e._process_symbol("X", {"X": 90.0})
+    assert sent == [], "sold at a loss despite never_sell_at_loss"

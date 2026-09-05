@@ -53,6 +53,18 @@ class RiskConfig:
     # Crypto is exempt from PDT and is never gated by this.
     pdt_guard: bool = True
     max_day_trades_per_5_days: int = 3
+    #: Refuse any exit that would realise a loss, so every completed sale is a
+    #: win. Measured across 12 symbols over 5 years before enabling:
+    #:     normal      mean +270.6%,  39% win rate
+    #:     never-lose  mean +112.9%,  91% win rate, 11/12 left holding a loser
+    #: It converts realised losses into unrealised ones. The win rate is real;
+    #: the money is worse, because capital sits in the worst names instead of
+    #: rotating. Enabled deliberately, not by default.
+    never_sell_at_loss: bool = False
+    #: Profit needed above cost before an exit counts as a win, in percent.
+    #: Must exceed round-trip costs or a "winning" sale still nets negative:
+    #: 0.05% covers the ~2bps-per-side measured on real fills.
+    min_profit_pct: float = 0.05
 
 
 @dataclass
@@ -234,6 +246,8 @@ def load_config(path: str = "config.yaml") -> Config:
             max_day_trades_per_5_days=int(
                 r.get("max_day_trades_per_5_days", 3)
             ),
+            never_sell_at_loss=bool(r.get("never_sell_at_loss", False)),
+            min_profit_pct=float(r.get("min_profit_pct", 0.05)),
         ),
         dashboard=DashboardConfig(
             enabled=bool(d.get("enabled", True)),

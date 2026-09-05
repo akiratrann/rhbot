@@ -257,6 +257,24 @@ risk:
   pdt_guard: true
   max_day_trades_per_5_days: 3
 
+  # EVERY SELL MUST BE A WIN. Requested, and measured across 12 symbols over
+  # 5 years before enabling:
+  #     normal      mean +270.6%,  39% win rate
+  #     never-lose  mean +112.9%,  91% win rate, 11 of 12 left holding a loser
+  #
+  # It does exactly what it says: no sale ever realises a loss. What it does
+  # NOT do is avoid losses — it converts realised ones into unrealised ones,
+  # and capital sits in the worst names instead of rotating into new setups.
+  # Across the test, 120-196 exits per symbol were refused.
+  #
+  # It also OVERRIDES max_hold_days: an underwater position is held past its
+  # 2-day limit rather than closed at a loss. That is the rule working, not a
+  # conflict.
+  never_sell_at_loss: true
+  # Must clear round-trip costs, or a "winning" sale still nets negative.
+  # 0.05% covers the ~2bps/side measured on real fills.
+  min_profit_pct: 0.05
+
 dashboard:
   enabled: true
   host: 127.0.0.1

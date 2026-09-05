@@ -67,6 +67,8 @@ class Engine:
         self._orphan_cache: Dict[str, tuple] = {}
         # Throttles repeated "stale data" logging to roughly once per hour.
         self._stale_logged: Dict[str, int] = {}
+        # Throttles the "held through an exit" line to ~once an hour per symbol.
+        self._loss_block_logged: Dict[str, int] = {}
 
     # ---- lifecycle --------------------------------------------------------
 
@@ -220,6 +222,24 @@ class Engine:
             if age is not None and age >= limit:
                 signal = Signal(symbol, SignalType.EXIT_LONG,
                                 f"max hold {limit:g}d reached ({age:.1f}d)")
+
+        # "Every sell must make money." Block any exit that would realise a
+        # loss. This OVERRIDES the max-hold cap: an underwater position is held
+        # past its limit rather than closed at a loss, which is the direct
+        # consequence of the rule and not a bug.
+        if (self.cfg.risk.never_sell_at_loss
+                and signal.type == SignalType.EXIT_LONG
+                and position is not None and position.quantity > 0):
+            mark = prices.get(symbol)
+            floor = position.avg_price * (1 + self.cfg.risk.min_profit_pct / 100)
+            if mark is not None and mark < floor:
+                if self._loss_block_logged.get(symbol) != int(time.time() // 3600):
+                    log.info("HOLDING %s through an exit signal: %.4f is below "
+                             "the %.4f profit floor (cost %.4f). never_sell_at_"
+                             "loss is on, so this stays open until it recovers.",
+                             symbol, mark, floor, position.avg_price)
+                    self._loss_block_logged[symbol] = int(time.time() // 3600)
+                return
 
         if signal.type == SignalType.HOLD:
             return
