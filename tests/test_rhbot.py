@@ -810,3 +810,91 @@ def test_it_overrides_the_max_hold_cap(tmp_path):
         "X", SignalType.HOLD, "no signal")
     e._process_symbol("X", {"X": 90.0})
     assert sent == [], "sold at a loss despite never_sell_at_loss"
+
+
+# ---- cooldown must survive a restart --------------------------------------
+
+def _cool_engine(tmp_path, cooldown=900):
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=cooldown))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    return Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk)), p
+
+
+def test_cooldown_survives_a_restart(tmp_path):
+    """_last_trade_ts is memory-only; a deploy cleared it and LMT was bought
+    twice 279s apart under a 900s cooldown."""
+    engine, p = _cool_engine(tmp_path)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 1, 100.0))   # just now
+    engine._last_trade_ts.clear()                                   # simulate restart
+    last = engine._last_fill_monotonic("X")
+    assert last is not None
+    assert time.time() - last < 60, "recent fill should read as recent"
+
+
+def test_no_fill_history_means_no_cooldown(tmp_path):
+    engine, _ = _cool_engine(tmp_path)
+    assert engine._last_fill_monotonic("X") is None
+
+
+def test_old_fill_does_not_block(tmp_path):
+    engine, p = _cool_engine(tmp_path)
+    old = datetime.now(timezone.utc) - timedelta(hours=5)
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 1, 100.0, ts=old))
+    engine._last_trade_ts.clear()
+    assert time.time() - engine._last_fill_monotonic("X") > 900
+
+
+# ---- the profit floor must use the BROKER's cost basis --------------------
+
+def test_profit_floor_prefers_the_brokers_basis(tmp_path):
+    """LMT sold at a loss because the LOCAL avg_price had drifted."""
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    from rhbot.models import Signal, SignalType
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=0,
+                        never_sell_at_loss=True, min_profit_pct=0.05))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 1, 536.42))   # local basis
+    e = Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk))
+    # Broker knows the true weighted basis is higher.
+    e.broker.position_details = lambda: {"X": {"avg_price": 537.92}}
+    sent = []
+    e.broker.submit = lambda o: sent.append(o) or None
+    e.strategies["X"].evaluate = lambda *a, **kw: Signal(
+        "X", SignalType.EXIT_LONG, "exit")
+    e._process_symbol("X", {"X": 536.70})       # cleared the LOCAL floor only
+    assert sent == [], "sold below the broker's cost basis"
+
+
+def test_falls_back_to_local_basis_when_broker_is_silent(tmp_path):
+    from rhbot.config import Config, WatchItem
+    from rhbot.engine import Engine
+    from rhbot.models import Signal, SignalType
+    cfg = Config(
+        watchlist=[WatchItem("X", AssetClass.STOCK, "slope_reversal",
+                             {"smooth": 2, "min_slope_pct": 0.0}, 100.0)],
+        risk=RiskConfig(kill_switch_file="/nonexistent/STOP",
+                        min_seconds_between_trades=0,
+                        never_sell_at_loss=True, min_profit_pct=0.05))
+    feed = SyntheticFeed(base_prices={"X": 100.0})
+    p = Portfolio(10_000.0, str(tmp_path / "s.json"))
+    p.apply_fill(Fill("X", AssetClass.STOCK, Side.BUY, 1, 100.0))
+    e = Engine(cfg, feed, PaperBroker(feed), p, RiskManager(cfg.risk))
+    sent = []
+    e.broker.submit = lambda o: sent.append(o) or None
+    e.strategies["X"].evaluate = lambda *a, **kw: Signal(
+        "X", SignalType.EXIT_LONG, "exit")
+    e._process_symbol("X", {"X": 95.0})
+    assert sent == []          # local basis still blocks the loss

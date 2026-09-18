@@ -70,18 +70,7 @@ max_bar_age_minutes:
 # roughly what chance alone produces. The per-symbol PARAMS are honestly
 # out-of-sample; the SYMBOL LIST is not.
 watchlist:
-  # OOS +11.17% vs hold -16.94%, 17 round trips — the largest trade sample
-  # among the survivors, so the least likely to be noise.
-  - symbol: META
-    asset_class: stock
-    strategy: slope_reversal
-    params:
-      smooth: 3
-      min_slope_pct: 0.002
-    order_notional: 20000.0
-
-  # OOS +44.44% vs hold -39.00%, 15 round trips. Biggest edge in the screen,
-  # and also the most volatile name here (27% max drawdown).
+  # walk-forward: test +70.27% vs hold +24.57% (edge +45.69%), 15 round trips, 26.6% max DD
   - symbol: SMCI
     asset_class: stock
     strategy: slope_reversal
@@ -90,7 +79,16 @@ watchlist:
       min_slope_pct: 0.01
     order_notional: 20000.0
 
-  # OOS +8.73% vs hold -8.27%, 14 round trips.
+  # walk-forward: test +16.80% vs hold -12.86% (edge +29.67%), 8 round trips, 18.2% max DD
+  - symbol: SHOP
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 8
+      min_slope_pct: 0.002
+    order_notional: 20000.0
+
+  # walk-forward: test +5.62% vs hold -10.07% (edge +15.70%), 14 round trips, 8.1% max DD
   - symbol: HD
     asset_class: stock
     strategy: slope_reversal
@@ -99,8 +97,7 @@ watchlist:
       min_slope_pct: 0.0
     order_notional: 20000.0
 
-  # OOS +4.34% vs hold -5.26%, 11 round trips. Low-volatility telecom, included
-  # to keep the basket from being all high-beta tech.
+  # walk-forward: test +8.60% vs hold +0.50% (edge +8.09%), 14 round trips, 14.3% max DD
   - symbol: T
     asset_class: stock
     strategy: slope_reversal
@@ -109,8 +106,8 @@ watchlist:
       min_slope_pct: 0.01
     order_notional: 20000.0
 
-  # Crypto: uncorrelated with equities, exempt from the PDT cap, and the only
-  # slot that can trade outside market hours.
+  # Crypto is not walk-forward screened here (the equity universe
+  # above is). It is present for PDT exemption and 24/7 coverage.
   - symbol: BTC-USD
     asset_class: crypto
     strategy: slope_reversal
@@ -118,7 +115,6 @@ watchlist:
       smooth: 5
       min_slope_pct: 0.002
     order_notional: 20000.0
-
 # ------------------------------------------------------------
 #  Risk limits — enforced on every order before it is placed.
 #  These are your safety rails. Tighten them, don't loosen them.

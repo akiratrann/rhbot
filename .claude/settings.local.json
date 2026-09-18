@@ -184,7 +184,11 @@
       "Bash(lsof -nP -iTCP:8973 -sTCP:LISTEN)",
       "Bash(curl -s \"https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q11587311|Q11377684|Q11430042|Q2969455&props=descriptions|sitelinks&languages=en&sitefilter=enwiki&format=json&formatversion=2\")",
       "Read(//Users/akiratran/furigana-desk/**)",
-      "Bash(rm -rf data/images/*)"
+      "Bash(rm -rf data/images/*)",
+      "Read(//Users/akiratran/aetherion-studio/**)",
+      "Bash(rm -f unity/Bunbu/Build/shots/d0_vnA/* unity/Bunbu/Build/shots/d0_vnB/*)",
+      "Bash(/Users/akiratran/aetherion-studio/unity/Bunbu/Build/macOS/Bunbu.app/Contents/MacOS/Bunbu -bunbu-lookshot vn -bunbu-lookdir /Users/akiratran/aetherion-studio/unity/Bunbu/Build/shots/d0_vnA -screen-width 1920 -screen-height 1080 -screen-fullscreen 0)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

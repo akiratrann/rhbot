@@ -154,6 +154,48 @@ class Engine:
         self._stale_logged.pop(symbol, None)
         return False
 
+    def _broker_cost_basis(self, symbol: str) -> Optional[float]:
+        """Average entry price as the BROKER reports it, or None.
+
+        The local book can drift (a lost fill, a partial). Any rule that gates
+        on profitability has to use the number the money is actually measured
+        against.
+        """
+        details = getattr(self.broker, "position_details", None)
+        if details is None:
+            return None
+        try:
+            row = details().get(symbol)
+        except Exception:  # noqa: BLE001 — never break a tick on a lookup
+            return None
+        if not row:
+            return None
+        basis = row.get("avg_price")
+        return float(basis) if basis else None
+
+    def _last_fill_monotonic(self, symbol: str) -> Optional[float]:
+        """Last fill time for `symbol` from the saved book, as a monotonic-like
+        value comparable with time.time().
+
+        Reads the persisted fills so the cooldown survives a restart.
+        """
+        newest = None
+        for f in reversed(self.portfolio.fills):
+            if f.get("symbol") != symbol:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(f["ts"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            newest = ts
+            break
+        if newest is None:
+            return None
+        age = (datetime.now(timezone.utc) - newest).total_seconds()
+        return time.time() - age
+
     @staticmethod
     def _position_age_days(position) -> Optional[float]:
         """Days since the position was OPENED, or None if unknown.
@@ -231,7 +273,14 @@ class Engine:
                 and signal.type == SignalType.EXIT_LONG
                 and position is not None and position.quantity > 0):
             mark = prices.get(symbol)
-            floor = position.avg_price * (1 + self.cfg.risk.min_profit_pct / 100)
+            # Use the BROKER's cost basis, not the local book's. LMT sold at a
+            # loss under this rule because the local avg_price had drifted from
+            # the broker's: the floor was computed from the wrong number and
+            # the sale cleared it by a cent.
+            basis = self._broker_cost_basis(symbol)
+            if basis is None:
+                basis = position.avg_price
+            floor = basis * (1 + self.cfg.risk.min_profit_pct / 100)
             if mark is not None and mark < floor:
                 if self._loss_block_logged.get(symbol) != int(time.time() // 3600):
                     log.info("HOLDING %s through an exit signal: %.4f is below "
@@ -265,6 +314,12 @@ class Engine:
         # Frequency governor — enforce the per-symbol cooldown.
         cooldown = self.cfg.risk.min_seconds_between_trades
         last = self._last_trade_ts.get(symbol)
+        if last is None:
+            # Fall back to the PERSISTED fill history. _last_trade_ts lives in
+            # memory only, so every restart cleared it and a symbol could be
+            # re-entered seconds after a deploy. LMT was bought twice 279s
+            # apart under a 900s cooldown for exactly this reason.
+            last = self._last_fill_monotonic(symbol)
         if cooldown > 0 and last is not None and (time.time() - last) < cooldown:
             wait = cooldown - (time.time() - last)
             log.info("COOLDOWN %s %s: %.0fs left", side.value.upper(), symbol, wait)
