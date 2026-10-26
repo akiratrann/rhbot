@@ -694,3 +694,33 @@ def test_unknown_per_symbol_interval_is_rejected():
                                       "sma_crossover", bar_interval="7m")])
     with pytest.raises(ValueError, match="bar_interval must be one of"):
         _validate(cfg)
+
+
+# ---- orders must carry WHY they fired -------------------------------------
+
+def test_client_order_id_encodes_the_reason():
+    """Fly's logs proved unreadable after the fact; the broker keeps this
+    forever, so the reason has to travel with the order."""
+    client = make_client(_clock_routes(True) + _buy_routes())
+    AlpacaBroker(client).submit(
+        Order("AAPL", AssetClass.STOCK, Side.BUY, 100.0, reason="maxhold"))
+    coid = client._session.sent_bodies("/v2/orders")[0]["client_order_id"]
+    assert coid.startswith("rhbot-maxhold-")
+
+
+def test_default_reason_is_signal():
+    client = make_client(_clock_routes(True) + _buy_routes())
+    AlpacaBroker(client).submit(Order("AAPL", AssetClass.STOCK, Side.BUY, 100.0))
+    coid = client._session.sent_bodies("/v2/orders")[0]["client_order_id"]
+    assert coid.startswith("rhbot-signal-")
+
+
+def test_reason_is_sanitised_for_the_broker():
+    """A reason with punctuation or spaces must not produce an invalid id."""
+    client = make_client(_clock_routes(True) + _buy_routes())
+    AlpacaBroker(client).submit(
+        Order("AAPL", AssetClass.STOCK, Side.BUY, 100.0,
+              reason="max hold 2d / forced!"))
+    coid = client._session.sent_bodies("/v2/orders")[0]["client_order_id"]
+    assert coid.startswith("rhbot-maxhold2dfor-")
+    assert " " not in coid and "/" not in coid

@@ -48,7 +48,12 @@ class Order:
     symbol: str
     asset_class: AssetClass
     side: Side
-    notional: float                     # dollar amount to trade
+    notional: float
+    #: Short tag for WHY this order fired, carried into the broker's
+    #: client_order_id. Fly's log endpoint has proved unreliable to read back,
+    #: so the reason has to live somewhere the broker stores permanently —
+    #: otherwise "is the rule actually firing?" is unanswerable after the fact.
+    reason: str = "signal"                     # dollar amount to trade
     ts: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

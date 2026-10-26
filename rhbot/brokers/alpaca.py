@@ -91,7 +91,12 @@ class AlpacaBroker(Broker):
                      order.side.value.upper(), order.symbol)
             return None
 
-        coid = f"rhbot-{uuid.uuid4()}"
+        # Reason is encoded here on purpose: Alpaca keeps client_order_id
+        # forever, so every order carries an auditable record of WHY it fired
+        # even when logs are gone.
+        tag = "".join(ch for ch in getattr(order, "reason", "signal")
+                      if ch.isalnum())[:12] or "signal"
+        coid = f"rhbot-{tag}-{uuid.uuid4()}"
 
         if order.side == Side.BUY:
             kwargs = {"notional": order.notional}

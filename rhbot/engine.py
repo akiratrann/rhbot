@@ -234,6 +234,7 @@ class Engine:
         return self._orphan_cache[symbol]
 
     def _process_symbol(self, symbol: str, prices: Dict[str, float]) -> None:
+        reason_tag = "signal"
         orphaned = symbol not in self.watch
         if orphaned:
             strat, asset_class = self._orphan(symbol)
@@ -264,6 +265,7 @@ class Engine:
             if age is not None and age >= limit:
                 signal = Signal(symbol, SignalType.EXIT_LONG,
                                 f"max hold {limit:g}d reached ({age:.1f}d)")
+                reason_tag = "maxhold"
 
         # "Every sell must make money." Block any exit that would realise a
         # loss. This OVERRIDES the max-hold cap: an underwater position is held
@@ -325,8 +327,10 @@ class Engine:
             log.info("COOLDOWN %s %s: %.0fs left", side.value.upper(), symbol, wait)
             return
 
+        if orphaned:
+            reason_tag = "orphan"
         order = Order(symbol=symbol, asset_class=asset_class,
-                      side=side, notional=notional)
+                      side=side, notional=notional, reason=reason_tag)
 
         reason = self.risk.check(order, self.portfolio, prices)
         if reason:

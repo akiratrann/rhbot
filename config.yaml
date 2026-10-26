@@ -70,25 +70,16 @@ max_bar_age_minutes:
 # roughly what chance alone produces. The per-symbol PARAMS are honestly
 # out-of-sample; the SYMBOL LIST is not.
 watchlist:
-  # walk-forward: test +70.27% vs hold +24.57% (edge +45.69%), 15 round trips, 26.6% max DD
-  - symbol: SMCI
+  # walk-forward: test +16.95% vs hold -27.42% (edge +44.37%), 21 round trips, 14.7% max DD
+  - symbol: NFLX
     asset_class: stock
     strategy: slope_reversal
     params:
-      smooth: 2
-      min_slope_pct: 0.01
+      smooth: 3
+      min_slope_pct: 0.0
     order_notional: 20000.0
 
-  # walk-forward: test +16.80% vs hold -12.86% (edge +29.67%), 8 round trips, 18.2% max DD
-  - symbol: SHOP
-    asset_class: stock
-    strategy: slope_reversal
-    params:
-      smooth: 8
-      min_slope_pct: 0.002
-    order_notional: 20000.0
-
-  # walk-forward: test +5.62% vs hold -10.07% (edge +15.70%), 14 round trips, 8.1% max DD
+  # walk-forward: test +9.45% vs hold -8.37% (edge +17.82%), 10 round trips, 7.2% max DD
   - symbol: HD
     asset_class: stock
     strategy: slope_reversal
@@ -97,13 +88,22 @@ watchlist:
       min_slope_pct: 0.0
     order_notional: 20000.0
 
-  # walk-forward: test +8.60% vs hold +0.50% (edge +8.09%), 14 round trips, 14.3% max DD
-  - symbol: T
+  # walk-forward: test +30.76% vs hold +15.17% (edge +15.59%), 17 round trips, 12.2% max DD
+  - symbol: CAT
     asset_class: stock
     strategy: slope_reversal
     params:
-      smooth: 1
-      min_slope_pct: 0.01
+      smooth: 8
+      min_slope_pct: 0.0
+    order_notional: 20000.0
+
+  # walk-forward: test +32.39% vs hold +22.37% (edge +10.02%), 7 round trips, 6.5% max DD
+  - symbol: ABBV
+    asset_class: stock
+    strategy: slope_reversal
+    params:
+      smooth: 5
+      min_slope_pct: 0.002
     order_notional: 20000.0
 
   # Crypto is not walk-forward screened here (the equity universe
